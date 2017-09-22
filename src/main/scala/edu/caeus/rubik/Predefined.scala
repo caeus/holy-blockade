@@ -1,6 +1,6 @@
 package edu.caeus.rubik
 
-import edu.caeus.rubik.defs.Vector3D
+import edu.caeus.rubik.defs._
 import shapeless._
 
 /**
