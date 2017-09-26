@@ -2,6 +2,7 @@ package edu.caeus.rubik
 
 import shapeless._
 
+import scala.language.higherKinds
 import scala.util.Random
 
 /**
@@ -13,17 +14,28 @@ object defs {
   type RMatrix = Vector3D :: Vector3D :: Vector3D :: HNil
 
   case class Piece(
-                    facing: Vector3D,
-                    position: Vector3D,
-                    aim: Vector3D
+                    face: Vector3D,
+                    pos: Vector3D
                   )
+  case class AimedPiece(curr:Piece,
+                        aim:Piece)
+  object AimedPiece{
+    def apply(piece:Piece):AimedPiece={
+      AimedPiece(curr = piece,aim = piece)
+    }
+    implicit class Ops(val piece: AimedPiece) extends AnyVal {
+      def |>(movement: Movement): AimedPiece = {
+        AimedPiece(piece.curr |> movement,piece.aim)
+      }
+    }
+  }
   object Piece{
     implicit class Ops(val piece: Piece) extends AnyVal {
-      def <+>(movement: Movement): Piece = {
-        if (movement.axis.extract(piece.position) == movement.plane) {
+      def |>(movement: Movement): Piece = {
+        if (movement.axis.extract(piece.pos) == movement.plane) {
           val matrix = movement.axis(movement.dir)
-          piece.copy(facing = matrix * piece.facing,
-            position = matrix * piece.position
+          piece.copy(face = matrix * piece.face,
+            pos = matrix * piece.pos
           )
         } else piece
       }
@@ -33,16 +45,16 @@ object defs {
     implicit class Ops(val dir:Dir) extends AnyVal{
       def unary_! : Dir ={
         dir match {
-          case `~>` => <~
-          case `<~` => ~>
+          case `^*` => *^
+          case `*^` => ^*
         }
       }
     }
     def random: Dir = {
       val random = new Random()
       random.nextInt(2) match {
-        case 0 => ~>
-        case 1 => <~
+        case 0 => ^*
+        case 1 => *^
       }
     }
   }
@@ -61,26 +73,38 @@ object defs {
     }
   }
 
+  trait Monad[M[_]]{
+    def bind[A,B](m:M[A],f:A=>M[B])
+    def point[A](a:A):M[A]
+  }
 
 
 
-  implicit class MultV(val v1: Vector3D) extends AnyVal {
+
+
+  implicit class Vector3DOps(val v1: Vector3D) extends AnyVal {
     def *(v2: Vector3D): Int = {
       v1.head * v2.head +
         v1.tail.head * v2.tail.head +
         v1.tail.tail.head * v2.tail.tail.head
-
     }
+
   }
 
   implicit class MultM(val value: Vector3D ::
     Vector3D ::
     Vector3D :: HNil) extends AnyVal {
 
-    def *(vector: Vector3D) = {
+    def *(vector: Vector3D): Int ::Int :: Int :: HNil = {
       value.head * vector ::
         value.tail.head * vector ::
         value.tail.tail.head * vector :: HNil
+    }
+  }
+
+  implicit class PiecesOps(val cube:Seq[AimedPiece]){
+    def |>(movement: Movement): Seq[AimedPiece] ={
+      cube.map(_ |> movement)
     }
   }
 
@@ -96,19 +120,19 @@ object defs {
 
 
 
-  object ~> extends Dir
+  object ^* extends Dir
 
-  object <~ extends Dir
+  object *^ extends Dir
 
   object X extends Axis {
 
 
     override def apply(dir: Dir): RMatrix = dir match {
-      case `~>` =>
+      case ^* =>
         (1 :: 0 :: 0 :: HNil) ::
           (0 :: 0 :: -1 :: HNil) ::
           (0 :: 1 :: 0 :: HNil) :: HNil
-      case `<~` =>
+      case *^ =>
         (1 :: 0 :: 0 :: HNil) ::
           (0 :: 0 :: 1 :: HNil) ::
           (0 :: -1 :: 0 :: HNil) :: HNil
@@ -121,11 +145,11 @@ object defs {
 
 
     override def apply(dir: Dir): RMatrix = dir match {
-      case `~>` =>
+      case `^*` =>
         (0 :: 0 :: 1 :: HNil) ::
           (0 :: 1 :: 0 :: HNil) ::
           (-1 :: 0 :: 0 :: HNil) :: HNil
-      case `<~` =>
+      case `*^` =>
         (0 :: 0 :: -1 :: HNil) ::
           (0 :: 1 :: 0 :: HNil) ::
           (1 :: 0 :: 0 :: HNil) :: HNil
@@ -137,21 +161,21 @@ object defs {
   object Z extends Axis {
 
     override def apply(dir: Dir): RMatrix = dir match {
-      case `~>` =>
+      case `^*` =>
         (0 :: -1 :: 0 :: HNil) ::
           (1 :: 0 :: 0 :: HNil) ::
           (0 :: 0 :: 1 :: HNil) :: HNil
-      case `<~` =>
+      case `*^` =>
         (0 :: 1 :: 0 :: HNil) ::
           (-1 :: 0 :: 0 :: HNil) ::
           (0 :: 0 :: 1 :: HNil) :: HNil
     }
 
-    override def extract(position: Vector3D) = position.tail.tail.head
+    override def extract(position: Vector3D): Int = position.tail.tail.head
   }
 
   object Axis {
-    def random = {
+    def random: Axis = {
       val random = new Random()
       random.nextInt(3) match {
         case 0 => X
